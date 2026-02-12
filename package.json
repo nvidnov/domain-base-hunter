@@ -1,0 +1,13 @@
+{
+  "name": "domains-db-app",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -n \"server,client\" \"npm --prefix server run dev\" \"npm --prefix client run dev\"",
+    "start": "concurrently -n \"server,client\" \"npm --prefix server run start\" \"npm --prefix client run preview\"",
+    "install:all": "npm --prefix server install && npm --prefix client install",
+    "build": "npm --prefix client run build"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}

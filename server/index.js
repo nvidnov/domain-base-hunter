@@ -403,26 +403,39 @@ async function checkSpamhaus(domain) {
 }
 
 async function checkWayback(domain) {
-  // Wayback Machine Availability API — fast check (~2-3s), no key needed.
+  // Wayback Machine: availability check (fast) + CDX count (slower but gives numbers).
   const link = `https://web.archive.org/web/*/${encodeURIComponent(domain)}`;
   try {
-    const availUrl = `https://archive.org/wayback/available?url=http://${encodeURIComponent(domain)}`;
-    const { res: availRes, json: availJson } = await fetchJsonWithRetry(
-      availUrl,
+    // Run both in parallel: availability (fast ~2s) + CDX count (~10-15s)
+    const availPromise = fetchJsonWithRetry(
+      `https://archive.org/wayback/available?url=http://${encodeURIComponent(domain)}`,
       { headers: { Accept: 'application/json' } },
       { timeoutMs: 8_000, retries: 1 }
-    );
-    if (!availRes.ok) {
-      return { supported: true, error: `HTTP ${availRes.status}`, link };
-    }
-    const closest = availRes.ok ? availJson?.archived_snapshots?.closest : null;
+    ).catch(() => null);
+
+    const cdxPromise = fetchJsonWithRetry(
+      `https://web.archive.org/cdx/search/cdx?url=${encodeURIComponent(domain)}&matchType=exact&output=json&fl=timestamp&limit=10000`,
+      { headers: { Accept: 'application/json' } },
+      { timeoutMs: 25_000, retries: 0 }
+    ).catch(() => null);
+
+    const [availResult, cdxResult] = await Promise.all([availPromise, cdxPromise]);
+
+    // Parse availability
+    const closest = availResult?.res?.ok ? availResult.json?.archived_snapshots?.closest : null;
     const hasSnapshots = !!closest?.available;
     const lastSnapshot = closest?.timestamp
       ? `${closest.timestamp.slice(0, 4)}-${closest.timestamp.slice(4, 6)}-${closest.timestamp.slice(6, 8)}`
       : null;
-    const snapshotUrl = closest?.url || null;
 
-    return { supported: true, hasSnapshots, lastSnapshot, snapshotUrl, link };
+    // Parse CDX count
+    let snapshots = null;
+    if (cdxResult?.res?.ok && Array.isArray(cdxResult.json) && cdxResult.json.length > 0) {
+      snapshots = cdxResult.json.length - 1; // first row is header ["timestamp"]
+      if (snapshots >= 9999) snapshots = '10000+';
+    }
+
+    return { supported: true, hasSnapshots, snapshots, lastSnapshot, link };
   } catch (err) {
     return { supported: true, error: err?.message || String(err), link };
   }

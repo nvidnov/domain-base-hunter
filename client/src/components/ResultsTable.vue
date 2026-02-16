@@ -55,13 +55,23 @@ function waybackCell(domain) {
   if (w.error) return { text: 'ошибка', kind: 'error', link: w.link || null };
 
   const link = w.link || null;
+  const snap = w.snapshots;
 
-  if (w.hasSnapshots) {
-    const label = w.lastSnapshot ? `Есть (${w.lastSnapshot})` : 'Есть';
-    return { text: label, kind: 'good', link };
+  // CDX returned a number
+  if (snap != null && snap !== '') {
+    const isOverflow = typeof snap === 'string'; // "10000+"
+    const n = isOverflow ? 10000 : Number(snap);
+    const label = isOverflow ? snap : n.toLocaleString();
+    const kind = n >= 50 ? 'good' : n > 0 ? 'ok' : 'muted';
+    return { text: label, kind, link };
   }
 
-  return { text: 'Нет', kind: 'muted', link };
+  // CDX timed out — fall back to availability result
+  if (w.hasSnapshots) {
+    return { text: 'Есть', kind: 'ok', link };
+  }
+
+  return { text: '0', kind: 'muted', link };
 }
 
 function spamhausCell(domain) {
